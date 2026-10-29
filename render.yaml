@@ -3,6 +3,7 @@ services:
     name: discover-jordan-api
     runtime: node
     rootDir: backend
+    plan: free
     buildCommand: npm ci
     startCommand: npm start
     healthCheckPath: /api/health
@@ -13,9 +14,7 @@ services:
         generateValue: true
       - key: MONGODB_URI
         sync: false
-      - key: GEMINI_API_KEY
-        sync: false
       - key: GEMINI_MODEL
         value: gemini-2.5-flash
       - key: CORS_ORIGIN
-        sync: false
+        value: https://discover-jordan.vercel.app
