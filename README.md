@@ -35,7 +35,8 @@ Backend:
   - JWT_SECRET=a long random secret
   - MONGODB_URI=your MongoDB connection string (optional for local development; required in production)
   - GEMINI_API_KEY=your private Gemini API key (required for live AI chat; get a key from Google AI Studio)
-  - GEMINI_MODEL=gemini-2.5-flash (optional)
+  - GEMINI_MODEL=gemini-3.8-flash (optional; falls back to Gemini 3.6 Flash and 3.5 Flash-Lite if the selected model is unavailable)
+  - ADMIN_EMAIL=the exact account email that should receive the admin role (optional)
   - CORS_ORIGIN=http://localhost:5173
   - FRONTEND_URL=http://localhost:5173
   - GOOGLE_CLIENT_ID=your Google OAuth Web client ID
@@ -58,7 +59,7 @@ Frontend:
 The frontend will run on the Vite dev server, and the API will run on port 5000.
 
 ## Admin Access
-- Register a new account and then use the admin role in the database or update the role manually to admin.
+- Set `ADMIN_EMAIL` in the backend environment to the exact account email that should receive administrator access. The matching verified email/password or Google account is promoted on sign-in; other accounts are not affected.
 - The admin dashboard is available from the top navigation once the user has the admin role. Dashboard data is returned only to an authenticated admin by `/api/admin/overview`.
 
 ## Google Sign-In and Account Email
@@ -83,7 +84,7 @@ The repo includes a Render blueprint at render.yaml and Vercel SPA routing at fr
 
 1. Create a MongoDB Atlas database and a database user. Allow connections from your Render service (or use Atlas network access rules appropriate to your deployment).
 2. Push this repository to a Git provider.
-3. In Render, create a Blueprint from the repository. Set the private `MONGODB_URI`, `GEMINI_API_KEY`, `RESEND_API_KEY`, `EMAIL_FROM`, `GOOGLE_CLIENT_ID`, `FRONTEND_URL`, and `CORS_ORIGIN` values. `FRONTEND_URL` and `CORS_ORIGIN` must use the exact deployed Vercel origin. Render generates `JWT_SECRET`.
+3. In Render, create a Blueprint from the repository. Set the private `MONGODB_URI`, `GEMINI_API_KEY`, `RESEND_API_KEY`, `EMAIL_FROM`, `GOOGLE_CLIENT_ID`, `ADMIN_EMAIL`, `FRONTEND_URL`, and `CORS_ORIGIN` values. `FRONTEND_URL` and `CORS_ORIGIN` must use the exact deployed Vercel origin. Render generates `JWT_SECRET`.
 4. Deploy the frontend on Vercel with the project root set to `frontend`. Set `VITE_API_URL` to the deployed Render service's HTTPS origin and `VITE_GOOGLE_CLIENT_ID` to the Google Web client ID, then redeploy.
 5. Update Render's `CORS_ORIGIN` and `FRONTEND_URL` to the final Vercel production URL and redeploy the backend.
 6. Confirm the Render /api/health endpoint, register/login in Vercel, load the Jordan map, then test trip save and Gemini chat.

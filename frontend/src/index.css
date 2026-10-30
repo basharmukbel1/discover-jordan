@@ -398,6 +398,12 @@ select {
   letter-spacing: -0.04em;
 }
 
+.admin-welcome {
+  margin: 0.35rem 0 0;
+  color: var(--admin-muted);
+  font-size: 0.84rem;
+}
+
 .admin-view-site,
 .admin-period {
   padding: 0.5rem 0.7rem;

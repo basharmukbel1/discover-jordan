@@ -6,6 +6,16 @@ const { isConfigured, sendEmail } = require("../services/emailService");
 
 const generateToken = (id) =>
   jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "7d" });
+const isConfiguredAdmin = (email) =>
+  typeof process.env.ADMIN_EMAIL === "string" &&
+  email?.trim().toLowerCase() === process.env.ADMIN_EMAIL.trim().toLowerCase();
+const promoteConfiguredAdmin = async (user) => {
+  if (isConfiguredAdmin(user.email) && user.role !== "admin") {
+    user.role = "admin";
+    await user.save();
+  }
+  return user;
+};
 const hashToken = (token) => createHash("sha256").update(token).digest("hex");
 const createToken = () => randomBytes(32).toString("hex");
 const frontendUrl = () =>
@@ -55,6 +65,7 @@ const registerUser = async (req, res) => {
       name: name.trim(),
       email: normalizedEmail,
       password,
+      role: isConfiguredAdmin(normalizedEmail) ? "admin" : "user",
       emailVerified: false,
       emailVerificationToken: hashToken(token),
       emailVerificationExpires: Date.now() + 24 * 60 * 60 * 1000,
@@ -112,6 +123,7 @@ const loginUser = async (req, res) => {
       });
     }
 
+    await promoteConfiguredAdmin(user);
     return res.status(200).json({
       success: true,
       token: generateToken(user._id),
@@ -285,12 +297,14 @@ const googleLogin = async (req, res) => {
         email: payload.email.toLowerCase(),
         googleId: payload.sub,
         emailVerified: true,
+        role: isConfiguredAdmin(payload.email) ? "admin" : "user",
       });
     } else {
       user.googleId = payload.sub;
       user.emailVerified = true;
       user.emailVerificationToken = undefined;
       user.emailVerificationExpires = undefined;
+      if (isConfiguredAdmin(user.email)) user.role = "admin";
     }
 
     await user.save();
@@ -307,6 +321,7 @@ const googleLogin = async (req, res) => {
 
 const getCurrentUser = async (req, res) => {
   try {
+    await promoteConfiguredAdmin(req.user);
     const user = await User.findById(req.user._id).populate("favorites");
     return res.status(200).json({ success: true, user });
   } catch (error) {

@@ -29,7 +29,7 @@ const fetchOverview = async (token) => {
   return data.overview;
 };
 
-export default function AdminPage({ token }) {
+export default function AdminPage({ token, user }) {
   const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -113,6 +113,7 @@ export default function AdminPage({ token }) {
           <div>
             <p className="admin-kicker">DISCOVER JORDAN / ADMIN</p>
             <h1>Overview</h1>
+            <p className="admin-welcome">Welcome, {user?.name || user?.email}</p>
           </div>
           <Link className="admin-view-site" to="/">View website <span aria-hidden="true">↗</span></Link>
         </header>

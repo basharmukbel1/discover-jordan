@@ -2,7 +2,8 @@ const mongoose = require("mongoose");
 const { GoogleGenAI } = require("@google/genai");
 const Destination = require("../models/Destination");
 
-const DEFAULT_MODEL = "gemini-2.5-flash";
+const DEFAULT_MODEL = "gemini-3.8-flash";
+const FALLBACK_MODELS = ["gemini-3.6-flash", "gemini-3.5-flash-lite"];
 
 const chatWithAssistant = async (req, res) => {
   const { message, history = [], tripContext = {} } = req.body;
@@ -119,23 +120,28 @@ const chatWithAssistant = async (req, res) => {
     temperature: 0.6,
   };
   const configuredModel = process.env.GEMINI_MODEL?.trim() || DEFAULT_MODEL;
+  const modelCandidates = [...new Set([configuredModel, ...FALLBACK_MODELS])];
   let completion;
 
   try {
     const generateContent = (model) =>
       client.models.generateContent({ model, contents, config });
 
-    try {
-      completion = await generateContent(configuredModel);
-    } catch (error) {
-      if (Number(error.status) !== 404 || configuredModel === DEFAULT_MODEL) {
-        throw error;
-      }
+    for (const [index, model] of modelCandidates.entries()) {
+      try {
+        completion = await generateContent(model);
+        break;
+      } catch (error) {
+        const status = Number(error.status || error.statusCode);
+        const canRetry = status === 404 || status === 429 || status >= 500;
+        if (!canRetry || index === modelCandidates.length - 1) {
+          throw error;
+        }
 
-      console.warn(
-        `Gemini model "${configuredModel}" was not found; retrying with ${DEFAULT_MODEL}.`
-      );
-      completion = await generateContent(DEFAULT_MODEL);
+        console.warn(
+          `Gemini model "${model}" returned status ${status}; trying the next supported model.`
+        );
+      }
     }
 
     const reply = completion.text?.trim();
@@ -150,14 +156,14 @@ const chatWithAssistant = async (req, res) => {
     return res.status(200).json({ success: true, reply });
   } catch (error) {
     console.error("Gemini trip assistant request failed:", error.message);
-    const status = Number(error.status);
+    const status = Number(error.status || error.statusCode);
     const message =
       status === 401 || status === 403
         ? "The AI provider rejected its server configuration. Please contact site support."
         : status === 429
           ? "The AI assistant has reached its current usage limit. Please try again later."
           : status === 404
-            ? "The configured AI model is unavailable. Please contact site support."
+            ? "No configured Gemini model is available for this API key. Please contact site support to check the model and API access."
             : "The AI trip assistant could not complete that request. Please try again.";
     return res.status(status === 429 ? 503 : 502).json({
       success: false,

@@ -16,6 +16,8 @@ services:
         sync: false
       - key: GOOGLE_CLIENT_ID
         sync: false
+      - key: ADMIN_EMAIL
+        sync: false
       - key: RESEND_API_KEY
         sync: false
       - key: EMAIL_FROM
@@ -23,6 +25,6 @@ services:
       - key: FRONTEND_URL
         sync: false
       - key: GEMINI_MODEL
-        value: gemini-2.5-flash
+        value: gemini-3.8-flash
       - key: CORS_ORIGIN
         value: https://discover-jordan.vercel.app

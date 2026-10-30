@@ -194,7 +194,7 @@ function AppLayout() {
           <Route path="/favorites" element={<ProtectedRoute><FavoritesPage /></ProtectedRoute>} />
           <Route path="/planner" element={<ProtectedRoute><PlannerPage /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-          <Route path="/admin" element={<ProtectedRoute adminOnly><Suspense fallback={<Loading />}><AdminDashboardPage token={token} /></Suspense></ProtectedRoute>} />
+          <Route path="/admin" element={<ProtectedRoute adminOnly><Suspense fallback={<Loading />}><AdminDashboardPage token={token} user={user} /></Suspense></ProtectedRoute>} />
           <Route path="/login" element={<AuthPage mode="login" />} />
           <Route path="/register" element={<AuthPage mode="register" />} />
           <Route path="/verify-email" element={<Suspense fallback={<Loading />}><VerifyEmailPage /></Suspense>} />
@@ -222,8 +222,26 @@ function ProtectedRoute({ children, adminOnly = false }) {
   const { token, user, loading } = useAuth();
   if (loading) return <Loading />;
   if (!token || !user) return <Navigate to="/login" replace />;
-  if (adminOnly && user.role !== 'admin') return <Navigate to="/" replace />;
+  if (adminOnly && user.role !== 'admin') return <AdminAccessPage user={user} />;
   return children;
+}
+
+function AdminAccessPage({ user }) {
+  return (
+    <section className="card mx-auto my-5" style={{ maxWidth: '38rem' }}>
+      <div className="card-body p-4">
+        <p className="eyebrow mb-2">Admin workspace</p>
+        <h1 className="h3 fw-bold">Admin access required</h1>
+        <p className="text-secondary">
+          Signed in as <strong>{user.email}</strong>. This account does not have
+          the administrator role yet. Ask the site owner to assign this exact
+          email in the backend <code>ADMIN_EMAIL</code> setting, then sign in
+          again.
+        </p>
+        <Link className="btn btn-dark" to="/">Return to Discover Jordan</Link>
+      </div>
+    </section>
+  );
 }
 
 function useDestinations(params = {}) {
@@ -415,6 +433,8 @@ function PlannerPage() {
   const { token } = useAuth();
   const [destinations, setDestinations] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
+  const [destinationSearch, setDestinationSearch] = useState('');
+  const [destinationCategory, setDestinationCategory] = useState('All');
   const [trips, setTrips] = useState([]);
   const [form, setForm] = useState({ title: '', startDate: '', endDate: '', notes: '' });
   const [error, setError] = useState('');
@@ -442,6 +462,21 @@ function PlannerPage() {
   }, [location.state]);
 
   const chosen = destinations.filter(({ _id }) => selectedIds.includes(_id));
+  const visibleDestinations = useMemo(() => {
+    const searchTerm = destinationSearch.trim().toLowerCase();
+    return destinations
+      .filter((destination) => {
+        const matchesSearch = !searchTerm || [
+          destination.name,
+          destination.city,
+          destination.region,
+        ].some((value) => value?.toLowerCase().includes(searchTerm));
+        const matchesCategory = destinationCategory === 'All' ||
+          destination.category === destinationCategory;
+        return matchesSearch && matchesCategory;
+      })
+      .sort((first, second) => first.name.localeCompare(second.name));
+  }, [destinations, destinationSearch, destinationCategory]);
   const toggleDestination = (id) => setSelectedIds((ids) => ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id]);
   const saveTrip = async (event) => {
     event.preventDefault();
@@ -485,17 +520,52 @@ function PlannerPage() {
               </div>
               <textarea className="form-control" rows="3" placeholder="Interests, pace, or other notes" value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} />
               <fieldset>
-                <legend className="form-label">Choose places and activities</legend>
+                <legend className="form-label">Choose places and activities ({selectedIds.length} selected)</legend>
+                <div className="row g-2 mb-3">
+                  <div className="col-md">
+                    <label className="visually-hidden" htmlFor="planner-place-search">Search places</label>
+                    <input
+                      id="planner-place-search"
+                      className="form-control"
+                      value={destinationSearch}
+                      onChange={(event) => setDestinationSearch(event.target.value)}
+                      placeholder="Filter by place, city, or region"
+                    />
+                  </div>
+                  <div className="col-md-5">
+                    <label className="visually-hidden" htmlFor="planner-place-category">Filter places by category</label>
+                    <select
+                      id="planner-place-category"
+                      className="form-select"
+                      value={destinationCategory}
+                      onChange={(event) => setDestinationCategory(event.target.value)}
+                    >
+                      {categories.map((category) => <option key={category}>{category}</option>)}
+                    </select>
+                  </div>
+                </div>
+                {selectedIds.length > 0 && (
+                  <div className="d-flex justify-content-between align-items-center mb-2">
+                    <span className="small text-secondary">Estimated selection total: {formatCurrency(estimatedTotal)}</span>
+                    <button className="btn btn-sm btn-link" type="button" onClick={() => setSelectedIds([])}>Clear selection</button>
+                  </div>
+                )}
                 <div className="row g-2">
-                  {destinations.map((destination) => (
+                  {visibleDestinations.map((destination) => (
                     <div className="col-sm-6" key={destination._id}>
-                      <button type="button" onClick={() => toggleDestination(destination._id)} className={`btn w-100 text-start ${selectedIds.includes(destination._id) ? 'btn-warning' : 'btn-outline-secondary'}`}>
+                      <button
+                        type="button"
+                        aria-pressed={selectedIds.includes(destination._id)}
+                        onClick={() => toggleDestination(destination._id)}
+                        className={`btn w-100 text-start ${selectedIds.includes(destination._id) ? 'btn-warning' : 'btn-outline-secondary'}`}
+                      >
                         <span className="fw-semibold d-block">{destination.name}</span>
                         <span className="small">{formatCurrency(destination.price)} · {destination.category}</span>
                       </button>
                     </div>
                   ))}
                 </div>
+                {!visibleDestinations.length && <p className="small text-secondary mt-2 mb-0">No places match these filters. Try another search or category.</p>}
               </fieldset>
               <div className="d-flex justify-content-between"><span>Estimated entry/activity subtotal</span><strong>{formatCurrency(estimatedTotal)}</strong></div>
               <p className="small text-secondary">Estimate only; accommodation, transport, meals, taxes and actual provider prices may differ.</p>
