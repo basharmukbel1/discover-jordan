@@ -4,7 +4,7 @@ Discover Jordan is a full-stack tourism platform for exploring Jordan's most mem
 
 ## Features
 - Map-first Jordan experience with interactive price markers
-- Searchable destination catalog for heritage sites, hikes, nature reserves, museums, and activities
+- Searchable destination catalog for heritage sites, hikes, nature reserves, museums, and activities, including newly added Jordan Trail routes and canyon hikes
 - Destination detail pages with photos, source/license links, highlights, and estimated prices
 - Saved favorites for authenticated users
 - Personalized multi-destination trip planner and Gemini AI itinerary chat
@@ -73,7 +73,7 @@ The frontend will run on the Vite dev server, and the API will run on port 5000.
 - Destination photos are served from Wikimedia Commons. Each photo links to its Commons file page for author and license details.
 - The interactive map uses OpenStreetMap. Browser location is requested only after the visitor selects “Use my location” and is not sent to the backend.
 - The location action is opt-in and only marks the user’s current position in that browser session; it is not stored in the account or sent to the API.
-- Gemini chat requires GEMINI_API_KEY in backend/.env; never put the key in the frontend or commit it. The free tier has usage limits and can change.
+- Gemini chat requires GEMINI_API_KEY in backend/.env; never put the key in the frontend or commit it. The first assistant greeting is not sent as chat history because Gemini conversations must begin with a traveler message. The free tier has usage limits and can change.
 - Activity and entry costs are estimates in JOD, not live ticket quotes or bookings. Check official providers for current rates, access, and season restrictions.
 - Stripe checkout is not connected. The planner does not accept or process payments.
 

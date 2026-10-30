@@ -2,6 +2,8 @@ const mongoose = require("mongoose");
 const { GoogleGenAI } = require("@google/genai");
 const Destination = require("../models/Destination");
 
+const DEFAULT_MODEL = "gemini-2.5-flash";
+
 const chatWithAssistant = async (req, res) => {
   const { message, history = [], tripContext = {} } = req.body;
 
@@ -19,79 +21,122 @@ const chatWithAssistant = async (req, res) => {
     });
   }
 
+  const destinationIds = Array.isArray(tripContext.destinationIds)
+    ? tripContext.destinationIds
+        .filter((id) => mongoose.Types.ObjectId.isValid(id))
+        .slice(0, 20)
+    : [];
+  const destinationQuery = destinationIds.length
+    ? { _id: { $in: destinationIds } }
+    : {};
+  let destinations;
+
   try {
-    const destinationIds = Array.isArray(tripContext.destinationIds)
-      ? tripContext.destinationIds
-          .filter((id) => mongoose.Types.ObjectId.isValid(id))
-          .slice(0, 20)
-      : [];
-    const destinationQuery = destinationIds.length
-      ? { _id: { $in: destinationIds } }
-      : {};
-    const destinations = await Destination.find(destinationQuery)
+    destinations = await Destination.find(destinationQuery)
       .select("name city category duration price highlights")
-      .limit(20)
+      .limit(40)
       .lean();
+  } catch (error) {
+    console.error("Trip assistant destination lookup failed:", error.message);
+    return res.status(503).json({
+      success: false,
+      message: "The trip assistant could not load Jordan destination details. Please try again.",
+    });
+  }
 
-    const safeHistory = Array.isArray(history)
-      ? history
-          .filter(
-            (item) =>
-              item &&
-              ["user", "assistant"].includes(item.role) &&
-              typeof item.content === "string"
-          )
-          .slice(-8)
-          .map((item) => ({
-            role: item.role === "assistant" ? "model" : "user",
-            parts: [{ text: item.content.slice(0, 1200) }],
-          }))
-      : [];
+  const historyItems = Array.isArray(history)
+    ? history
+        .filter(
+          (item) =>
+            item &&
+            ["user", "assistant"].includes(item.role) &&
+            typeof item.content === "string"
+        )
+        .slice(-10)
+    : [];
+  const firstUserIndex = historyItems.findIndex((item) => item.role === "user");
+  const safeHistory = [];
 
-    const context = {
-      startDate:
-        typeof tripContext.startDate === "string"
-          ? tripContext.startDate.slice(0, 40)
-          : "",
-      endDate:
-        typeof tripContext.endDate === "string"
-          ? tripContext.endDate.slice(0, 40)
-          : "",
-      notes:
-        typeof tripContext.notes === "string"
-          ? tripContext.notes.slice(0, 500)
-          : "",
-      selectedDestinations: destinations.map((destination) => ({
-        name: destination.name,
-        city: destination.city,
-        category: destination.category,
-        duration: destination.duration,
-        highlights: destination.highlights,
-        estimatedPriceJod: destination.price,
-      })),
-    };
+  for (const item of historyItems.slice(firstUserIndex < 0 ? historyItems.length : firstUserIndex)) {
+    const role = item.role === "assistant" ? "model" : "user";
+    const content = item.content.slice(0, 1200);
+    const previous = safeHistory[safeHistory.length - 1];
 
-    const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    const completion = await client.models.generateContent({
-      model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
-      contents: [
-        ...safeHistory,
+    if (previous?.role === role) {
+      previous.parts[0].text = `${previous.parts[0].text}\n${content}`.slice(-1200);
+    } else {
+      safeHistory.push({ role, parts: [{ text: content }] });
+    }
+  }
+
+  if (safeHistory[safeHistory.length - 1]?.role === "user") {
+    safeHistory.pop();
+  }
+  if (safeHistory.length > 8) {
+    safeHistory.splice(0, safeHistory.length - 8);
+    if (safeHistory[0]?.role === "model") safeHistory.shift();
+  }
+
+  const context = {
+    startDate:
+      typeof tripContext.startDate === "string"
+        ? tripContext.startDate.slice(0, 40)
+        : "",
+    endDate:
+      typeof tripContext.endDate === "string"
+        ? tripContext.endDate.slice(0, 40)
+        : "",
+    notes:
+      typeof tripContext.notes === "string"
+        ? tripContext.notes.slice(0, 500)
+        : "",
+    selectedDestinations: destinations.map((destination) => ({
+      name: destination.name,
+      city: destination.city,
+      category: destination.category,
+      duration: destination.duration,
+      highlights: destination.highlights,
+      estimatedPriceJod: destination.price,
+    })),
+  };
+
+  const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  const contents = [
+    ...safeHistory,
+    {
+      role: "user",
+      parts: [
         {
-          role: "user",
-          parts: [
-            {
-              text: `Current trip context (JSON): ${JSON.stringify(context)}\n\nTraveler message: ${message.trim()}`,
-            },
-          ],
+          text: `Current trip context (JSON): ${JSON.stringify(context)}\n\nTraveler message: ${message.trim()}`,
         },
       ],
-      config: {
-        systemInstruction:
-          "You are Discover Jordan's travel-planning assistant. Help the signed-in traveler create practical itineraries in Jordan using the destination catalog provided in the user's trip context. Ask concise follow-up questions when important details are missing. Be clear that prices are estimates and that visitors must verify opening hours, transport, safety, and booking details with official sources. Do not claim to make reservations or payments.",
-        maxOutputTokens: 700,
-        temperature: 0.6,
-      },
-    });
+    },
+  ];
+  const config = {
+    systemInstruction:
+      "You are Discover Jordan's travel-planning assistant. Help the signed-in traveler create practical itineraries in Jordan using the destination catalog provided in the user's trip context. Ask concise follow-up questions when important details are missing. Be clear that prices are estimates and that visitors must verify opening hours, transport, safety, and booking details with official sources. Do not claim to make reservations or payments.",
+    maxOutputTokens: 700,
+    temperature: 0.6,
+  };
+  const configuredModel = process.env.GEMINI_MODEL?.trim() || DEFAULT_MODEL;
+  let completion;
+
+  try {
+    const generateContent = (model) =>
+      client.models.generateContent({ model, contents, config });
+
+    try {
+      completion = await generateContent(configuredModel);
+    } catch (error) {
+      if (Number(error.status) !== 404 || configuredModel === DEFAULT_MODEL) {
+        throw error;
+      }
+
+      console.warn(
+        `Gemini model "${configuredModel}" was not found; retrying with ${DEFAULT_MODEL}.`
+      );
+      completion = await generateContent(DEFAULT_MODEL);
+    }
 
     const reply = completion.text?.trim();
 
@@ -105,9 +150,18 @@ const chatWithAssistant = async (req, res) => {
     return res.status(200).json({ success: true, reply });
   } catch (error) {
     console.error("Gemini trip assistant request failed:", error.message);
-    return res.status(502).json({
+    const status = Number(error.status);
+    const message =
+      status === 401 || status === 403
+        ? "The AI provider rejected its server configuration. Please contact site support."
+        : status === 429
+          ? "The AI assistant has reached its current usage limit. Please try again later."
+          : status === 404
+            ? "The configured AI model is unavailable. Please contact site support."
+            : "The AI trip assistant could not complete that request. Please try again.";
+    return res.status(status === 429 ? 503 : 502).json({
       success: false,
-      message: "The AI trip assistant is temporarily unavailable. Please try again.",
+      message,
     });
   }
 };
