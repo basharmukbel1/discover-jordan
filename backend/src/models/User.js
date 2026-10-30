@@ -17,9 +17,25 @@ const userSchema = new mongoose.Schema(
     },
     password: {
       type: String,
-      required: true,
+      select: false,
+      required: function passwordRequired() {
+        return !this.googleId;
+      },
       minlength: 6,
     },
+    googleId: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
+    emailVerified: {
+      type: Boolean,
+      default: true,
+    },
+    emailVerificationToken: String,
+    emailVerificationExpires: Date,
+    passwordResetToken: String,
+    passwordResetExpires: Date,
     role: {
       type: String,
       enum: ["user", "admin"],
@@ -54,6 +70,11 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
 userSchema.methods.toJSON = function () {
   const user = this.toObject();
   delete user.password;
+  delete user.googleId;
+  delete user.emailVerificationToken;
+  delete user.emailVerificationExpires;
+  delete user.passwordResetToken;
+  delete user.passwordResetExpires;
   return user;
 };
 

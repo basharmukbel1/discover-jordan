@@ -7,6 +7,7 @@ const destinationRoutes = require("./routes/destinationRoutes");
 const tripRoutes = require("./routes/tripRoutes");
 const userRoutes = require("./routes/userRoutes");
 const assistantRoutes = require("./routes/assistantRoutes");
+const adminRoutes = require("./routes/adminRoutes");
 
 const app = express();
 const configuredOrigins = (process.env.CORS_ORIGIN || "")
@@ -45,6 +46,7 @@ app.use("/api/destinations", destinationRoutes);
 app.use("/api/trips", tripRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/assistant", assistantRoutes);
+app.use("/api/admin", adminRoutes);
 
 app.use((err, req, res, next) => {
   console.error("Error:", err.message);

@@ -13,9 +13,20 @@ import {
 import api from './api';
 import AiTripAssistant from './components/AiTripAssistant';
 import DestinationCard from './components/DestinationCard';
-import JordanMap from './components/JordanMap';
+import GoogleSignInButton from './components/GoogleSignInButton';
 
 const MapPage = lazy(() => import('./pages/MapPage'));
+const JordanMap = lazy(() => import('./components/JordanMap'));
+const AdminDashboardPage = lazy(() => import('./pages/AdminPage'));
+const VerifyEmailPage = lazy(() =>
+  import('./pages/AccountEmailPages').then((module) => ({ default: module.VerifyEmailPage }))
+);
+const ForgotPasswordPage = lazy(() =>
+  import('./pages/AccountEmailPages').then((module) => ({ default: module.ForgotPasswordPage }))
+);
+const ResetPasswordPage = lazy(() =>
+  import('./pages/AccountEmailPages').then((module) => ({ default: module.ResetPasswordPage }))
+);
 const categories = ['All', 'Historical', 'Nature', 'Adventure', 'Cultural', 'Relaxation', 'Hiking', 'Reserve', 'Museum'];
 const AuthContext = createContext(null);
 
@@ -98,7 +109,11 @@ function AuthProvider({ children }) {
     setTheme,
     setUser,
     login: (credentials) => authenticate('/api/auth/login', credentials),
-    register: (credentials) => authenticate('/api/auth/register', credentials),
+    register: async (credentials) => {
+      const { data } = await api.post('/api/auth/register', credentials);
+      return data;
+    },
+    googleLogin: (credential) => authenticate('/api/auth/google', { credential }),
     logout,
     favoriteIds: useMemo(
       () => user?.favorites?.map((item) => (typeof item === 'string' ? item : item?._id || item)) ?? [],
@@ -116,6 +131,7 @@ function useAuth() {
 
 function AppLayout() {
   const { token, user, logout, theme, setTheme } = useAuth();
+  const location = useLocation();
   const links = [
     { to: '/', label: 'Map' },
     { to: '/destinations', label: 'Places' },
@@ -169,7 +185,7 @@ function AppLayout() {
         </div>
       </nav>
 
-      <main className="container py-4 py-lg-5">
+      <main className={location.pathname === '/admin' ? 'admin-main' : 'container py-4 py-lg-5'}>
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/map" element={<Suspense fallback={<Loading />}><MapPage /></Suspense>} />
@@ -178,9 +194,12 @@ function AppLayout() {
           <Route path="/favorites" element={<ProtectedRoute><FavoritesPage /></ProtectedRoute>} />
           <Route path="/planner" element={<ProtectedRoute><PlannerPage /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-          <Route path="/admin" element={<ProtectedRoute adminOnly><AdminPage /></ProtectedRoute>} />
+          <Route path="/admin" element={<ProtectedRoute adminOnly><Suspense fallback={<Loading />}><AdminDashboardPage token={token} /></Suspense></ProtectedRoute>} />
           <Route path="/login" element={<AuthPage mode="login" />} />
           <Route path="/register" element={<AuthPage mode="register" />} />
+          <Route path="/verify-email" element={<Suspense fallback={<Loading />}><VerifyEmailPage /></Suspense>} />
+          <Route path="/forgot-password" element={<Suspense fallback={<Loading />}><ForgotPasswordPage /></Suspense>} />
+          <Route path="/reset-password" element={<Suspense fallback={<Loading />}><ResetPasswordPage /></Suspense>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
@@ -244,7 +263,7 @@ function HomePage() {
         <Link to="/destinations" className="btn btn-dark">Browse all places</Link>
       </header>
       {loading ? <Loading /> : error ? <div className="alert alert-danger">{error}</div> : (
-        <JordanMap destinations={destinations} className="map-home" />
+        <Suspense fallback={<Loading />}><JordanMap destinations={destinations} className="map-home" /></Suspense>
       )}
       <section className="d-flex flex-wrap gap-2" aria-label="Map legend">
         {['Heritage', 'Hiking & nature', 'Museums', 'Activities'].map((label) => (
@@ -549,7 +568,7 @@ function ProfilePage() {
   return <section className="card mx-auto profile-card"><div className="card-body p-4"><h1 className="h2 fw-bold">Your profile</h1><p className="text-secondary">{user.email}</p><form className="vstack gap-3" onSubmit={save}><label className="form-label">Name<input className="form-control mt-1" value={name} onChange={(event) => setName(event.target.value)} required /></label><button className="btn btn-dark">Save changes</button></form>{message && <p className="mt-3 mb-0" role="status">{message}</p>}</div></section>;
 }
 
-function AdminPage() {
+export function LegacyAdminPage() {
   const { token } = useAuth();
   const [form, setForm] = useState({ name: '', city: '', region: '', category: 'Historical', shortDescription: '', description: '', image: '', price: 0 });
   const [message, setMessage] = useState('');
@@ -568,24 +587,79 @@ function AdminPage() {
 }
 
 function AuthPage({ mode }) {
-  const { token, login, register } = useAuth();
+  const { token, login, register, googleLogin } = useAuth();
   const [form, setForm] = useState({ name: '', email: '', password: '' });
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [resending, setResending] = useState(false);
   const navigate = useNavigate();
   if (token) return <Navigate to="/" replace />;
   const isLogin = mode === 'login';
   const submit = async (event) => {
     event.preventDefault();
     setError('');
+    setNotice('');
+    setNeedsVerification(false);
     try {
-      if (isLogin) await login({ email: form.email, password: form.password });
-      else await register(form);
-      navigate('/');
+      if (isLogin) {
+        await login({ email: form.email, password: form.password });
+        navigate('/');
+      } else {
+        const result = await register(form);
+        setNotice(result.message);
+      }
     } catch (requestError) {
       setError(requestError.response?.data?.message || 'Could not authenticate.');
+      setNeedsVerification(
+        requestError.response?.data?.code === 'EMAIL_NOT_VERIFIED' ||
+        (!isLogin && requestError.response?.status === 503)
+      );
     }
   };
-  return <section className="card mx-auto auth-card"><div className="card-body p-4 p-md-5"><p className="eyebrow">{isLogin ? 'Welcome back' : 'Join the journey'}</p><h1 className="h2 fw-bold">{isLogin ? 'Sign in' : 'Create your account'}</h1><form className="vstack gap-3 mt-4" onSubmit={submit}>{!isLogin && <label className="form-label">Name<input className="form-control mt-1" required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label>}<label className="form-label">Email<input className="form-control mt-1" type="email" required value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></label><label className="form-label">Password<input className="form-control mt-1" type="password" minLength="6" required value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} /></label>{error && <div className="alert alert-danger">{error}</div>}<button className="btn btn-warning">{isLogin ? 'Sign in' : 'Register'}</button></form><p className="mt-3 mb-0 small">{isLogin ? 'New here?' : 'Already registered?'} <Link to={isLogin ? '/register' : '/login'}>{isLogin ? 'Create an account' : 'Sign in'}</Link></p></div></section>;
+  const signInWithGoogle = async (credential) => {
+    setError('');
+    try {
+      await googleLogin(credential);
+      navigate('/');
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || 'Google sign-in failed. Try again.');
+    }
+  };
+  const resendVerification = async () => {
+    setError('');
+    setNotice('');
+    setResending(true);
+    try {
+      const { data } = await api.post('/api/auth/resend-verification', { email: form.email });
+      setNotice(data.message);
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || 'Could not resend your verification email.');
+    } finally {
+      setResending(false);
+    }
+  };
+  return (
+    <section className="card mx-auto auth-card">
+      <div className="card-body p-4 p-md-5">
+        <p className="eyebrow">{isLogin ? 'Welcome back' : 'Join the journey'}</p>
+        <h1 className="h2 fw-bold">{isLogin ? 'Sign in' : 'Create your account'}</h1>
+        {error && <div className="alert alert-danger mt-3" role="alert">{error}</div>}
+        {notice && <div className="alert alert-success mt-3" role="status">{notice}</div>}
+        {needsVerification && <button className="btn btn-outline-secondary w-100" type="button" onClick={resendVerification} disabled={resending}>{resending ? 'Sending…' : 'Resend verification email'}</button>}
+        <form className="vstack gap-3 mt-4" onSubmit={submit}>
+          {!isLogin && <label className="form-label">Name<input className="form-control mt-1" autoComplete="name" required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label>}
+          <label className="form-label">Email<input className="form-control mt-1" type="email" autoComplete="email" required value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></label>
+          <label className="form-label">Password<input className="form-control mt-1" type="password" autoComplete={isLogin ? 'current-password' : 'new-password'} minLength="6" required value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} /></label>
+          <button className="btn btn-warning">{isLogin ? 'Sign in' : 'Register'}</button>
+        </form>
+        {isLogin && <p className="small mt-3 mb-0"><Link to="/forgot-password">Forgot your password?</Link></p>}
+        <div className="auth-divider"><span>or continue with</span></div>
+        <GoogleSignInButton onCredential={signInWithGoogle} />
+        <p className="mt-4 mb-0 small">{isLogin ? 'New here?' : 'Already registered?'} <Link to={isLogin ? '/register' : '/login'}>{isLogin ? 'Create an account' : 'Sign in'}</Link></p>
+      </div>
+    </section>
+  );
 }
 
 function formatCurrency(value) {
