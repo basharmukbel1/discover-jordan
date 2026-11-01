@@ -22,14 +22,16 @@ export default function DestinationCard({
           alt={destination.name}
           loading="lazy"
         />
-        <button
-          type="button"
-          className={`btn btn-sm favorite-button ${isFavorite ? "btn-danger" : "btn-light"}`}
-          onClick={onToggleFavorite}
-          aria-pressed={isFavorite}
-        >
-          {isFavorite ? "♥ Saved" : "♡ Save"}
-        </button>
+        {onToggleFavorite && (
+          <button
+            type="button"
+            className={`btn btn-sm favorite-button ${isFavorite ? "btn-danger" : "btn-light"}`}
+            onClick={onToggleFavorite}
+            aria-pressed={isFavorite}
+          >
+            {isFavorite ? "♥ Saved" : "♡ Save"}
+          </button>
+        )}
       </div>
       <div className="card-body d-flex flex-column">
         <div className="d-flex justify-content-between align-items-center gap-2 mb-2">

@@ -8,6 +8,7 @@ Discover Jordan is a full-stack tourism platform for exploring Jordan's most mem
 - Destination detail pages with photos, source/license links, highlights, and estimated prices
 - Saved favorites for authenticated users
 - Personalized multi-destination trip planner and Gemini AI itinerary chat
+- Free, public AI itinerary wizard personalized to regions, interests, travel companions, transport, arrival point, accommodation style, dates, budget, and pace
 - Light/dark theme toggle, saved across visits
 - JWT-based authentication, Google sign-in, and role-based access control
 - Email verification and password reset with Resend
@@ -34,7 +35,7 @@ Backend:
   - PORT=5000
   - JWT_SECRET=a long random secret
   - MONGODB_URI=your MongoDB connection string (optional for local development; required in production)
-  - GEMINI_API_KEY=your private Gemini API key (required for live AI chat; get a key from Google AI Studio)
+  - GEMINI_API_KEY=your private Gemini API key (required for live AI chat and trip planning; get a key from Google AI Studio)
   - GEMINI_MODEL=gemini-3.8-flash (optional; falls back to Gemini 3.6 Flash and 3.5 Flash-Lite if the selected model is unavailable)
   - ADMIN_EMAIL=the exact account email that should receive the admin role (optional)
   - CORS_ORIGIN=http://localhost:5173
@@ -75,8 +76,9 @@ The frontend will run on the Vite dev server, and the API will run on port 5000.
 - The interactive map uses OpenStreetMap. Browser location is requested only after the visitor selects “Use my location” and is not sent to the backend.
 - The location action is opt-in and only marks the user’s current position in that browser session; it is not stored in the account or sent to the API.
 - Gemini chat requires GEMINI_API_KEY in backend/.env; never put the key in the frontend or commit it. The first assistant greeting is not sent as chat history because Gemini conversations must begin with a traveler message. The free tier has usage limits and can change.
+- The AI planner is available to signed-in and signed-out visitors at `/premium-planner`; it is free and does not require checkout or a subscription. It asks for regions, activities, travel companions, transportation method, arrival point, accommodation style, budget, dates, and pace. The API validates these preferences and limits requests to five per 15 minutes; the prompt tailors transport guidance, family/activity suitability, travel density, lodging style, and Day 1 routing to the answers.
 - Activity and entry costs are estimates in JOD, not live ticket quotes or bookings. Check official providers for current rates, access, and season restrictions.
-- Stripe checkout is not connected. The planner does not accept or process payments.
+- Saved basic trip plans still require an account; AI itinerary generation is public.
 
 ## Deployment
 
@@ -87,6 +89,6 @@ The repo includes a Render blueprint at render.yaml and Vercel SPA routing at fr
 3. In Render, create a Blueprint from the repository. Set the private `MONGODB_URI`, `GEMINI_API_KEY`, `RESEND_API_KEY`, `EMAIL_FROM`, `GOOGLE_CLIENT_ID`, `ADMIN_EMAIL`, `FRONTEND_URL`, and `CORS_ORIGIN` values. `FRONTEND_URL` and `CORS_ORIGIN` must use the exact deployed Vercel origin. Render generates `JWT_SECRET`.
 4. Deploy the frontend on Vercel with the project root set to `frontend`. Set `VITE_API_URL` to the deployed Render service's HTTPS origin and `VITE_GOOGLE_CLIENT_ID` to the Google Web client ID, then redeploy.
 5. Update Render's `CORS_ORIGIN` and `FRONTEND_URL` to the final Vercel production URL and redeploy the backend.
-6. Confirm the Render /api/health endpoint, register/login in Vercel, load the Jordan map, then test trip save and Gemini chat.
+6. Confirm the Render `/api/health` endpoint and open `/premium-planner` to generate a free itinerary. Live itinerary generation requires a valid Gemini API key.
 
 Never commit .env files, API keys, Atlas credentials, or deployment tokens. Render and Vercel accounts/API credentials must be owned and configured by the project owner.

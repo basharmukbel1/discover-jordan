@@ -18,6 +18,7 @@ import GoogleSignInButton from './components/GoogleSignInButton';
 const MapPage = lazy(() => import('./pages/MapPage'));
 const JordanMap = lazy(() => import('./components/JordanMap'));
 const AdminDashboardPage = lazy(() => import('./pages/AdminPage'));
+const PremiumPlannerPage = lazy(() => import('./pages/PremiumPlannerPage'));
 const VerifyEmailPage = lazy(() =>
   import('./pages/AccountEmailPages').then((module) => ({ default: module.VerifyEmailPage }))
 );
@@ -130,18 +131,19 @@ function useAuth() {
 }
 
 function AppLayout() {
-  const { token, user, logout, theme, setTheme } = useAuth();
+  const { token, user, logout, theme, setTheme, setUser } = useAuth();
   const location = useLocation();
   const links = [
     { to: '/', label: 'Map' },
     { to: '/destinations', label: 'Places' },
     { to: '/planner', label: 'Plan a trip' },
+    { to: '/premium-planner', label: 'AI trip planner' },
     { to: '/favorites', label: 'Saved' },
   ];
 
   return (
     <div className="app-shell min-vh-100">
-      <nav className="navbar navbar-expand-lg border-bottom bg-body sticky-top">
+      {location.pathname !== '/admin' && <nav className="navbar navbar-expand-lg border-bottom bg-body sticky-top">
         <div className="container">
           <Link className="navbar-brand fw-bold d-flex align-items-center gap-2" to="/">
             <span className="brand-mark">J</span>
@@ -183,7 +185,7 @@ function AppLayout() {
             </div>
           </div>
         </div>
-      </nav>
+      </nav>}
 
       <main className={location.pathname === '/admin' ? 'admin-main' : 'container py-4 py-lg-5'}>
         <Routes>
@@ -193,6 +195,7 @@ function AppLayout() {
           <Route path="/destinations/:id" element={<DestinationDetailPage />} />
           <Route path="/favorites" element={<ProtectedRoute><FavoritesPage /></ProtectedRoute>} />
           <Route path="/planner" element={<ProtectedRoute><PlannerPage /></ProtectedRoute>} />
+          <Route path="/premium-planner" element={<Suspense fallback={<Loading />}><PremiumPlannerPage /></Suspense>} />
           <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
           <Route path="/admin" element={<ProtectedRoute adminOnly><Suspense fallback={<Loading />}><AdminDashboardPage token={token} user={user} /></Suspense></ProtectedRoute>} />
           <Route path="/login" element={<AuthPage mode="login" />} />
@@ -204,12 +207,12 @@ function AppLayout() {
         </Routes>
       </main>
 
-      <footer className="border-top py-4">
+      {location.pathname !== '/admin' && <footer className="border-top py-4">
         <div className="container d-flex flex-column flex-md-row justify-content-between gap-2 small text-secondary">
           <span>© 2026 Discover Jordan · Prices are estimates; verify with official providers.</span>
           <span>Map data © OpenStreetMap contributors</span>
         </div>
-      </footer>
+      </footer>}
     </div>
   );
 }
@@ -270,24 +273,74 @@ function useDestinations(params = {}) {
 
 function HomePage() {
   const { destinations, loading, error } = useDestinations({ limit: 100 });
+  const {
+    destinations: featuredPlaces,
+    loading: featuredLoading,
+    error: featuredError,
+  } = useDestinations({ limit: 6 });
   return (
-    <div className="vstack gap-4">
-      <header className="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-3">
-        <div>
-          <p className="eyebrow mb-2">Discover Jordan</p>
-          <h1 className="display-6 fw-bold mb-2">Find your next adventure</h1>
-          <p className="text-secondary mb-0">Explore heritage sites, hikes, reserves, museums, and activities across Jordan.</p>
+    <div className="home-page">
+      <header className="home-hero">
+        <div className="home-hero-copy">
+          <p className="eyebrow mb-3">Ahlan wa sahlan · Welcome to Jordan</p>
+          <h1 className="display-4 fw-bold mb-3">A little closer to the extraordinary.</h1>
+          <p className="home-hero-description">
+            From ancient rose-red cities to quiet desert skies, find the places
+            and experiences that make your Jordan journey yours.
+          </p>
+          <div className="d-flex flex-wrap gap-2 mt-4">
+            <Link to="/destinations" className="btn btn-warning btn-lg">Explore places</Link>
+            <Link to="/premium-planner" className="btn btn-outline-light btn-lg">Plan with AI <span aria-hidden="true">→</span></Link>
+          </div>
+          <div className="home-hero-highlights" aria-label="Discover Jordan highlights">
+            <span><strong>12</strong> governorates</span>
+            <span><strong>46+</strong> places to explore</span>
+            <span><strong>1</strong> unforgettable journey</span>
+          </div>
         </div>
-        <Link to="/destinations" className="btn btn-dark">Browse all places</Link>
+        <div className="home-hero-art" aria-hidden="true">
+          <span className="home-hero-sun" />
+          <span className="home-hero-desert home-hero-desert-back" />
+          <span className="home-hero-desert home-hero-desert-front" />
+          <span className="home-hero-caption">The colors of Jordan</span>
+        </div>
       </header>
+
       {loading ? <Loading /> : error ? <div className="alert alert-danger">{error}</div> : (
         <Suspense fallback={<Loading />}><JordanMap destinations={destinations} className="map-home" /></Suspense>
       )}
-      <section className="d-flex flex-wrap gap-2" aria-label="Map legend">
-        {['Heritage', 'Hiking & nature', 'Museums', 'Activities'].map((label) => (
-          <span key={label} className="badge text-bg-light border">{label}</span>
-        ))}
-        <span className="small text-secondary align-self-center">Marker prices are estimated per-person entry or activity costs in JOD.</span>
+
+      <section className="home-featured-section">
+        <div className="home-section-heading">
+          <div>
+            <p className="eyebrow mb-2">Start exploring</p>
+            <h2 className="display-6 fw-bold mb-2">Places that stay with you</h2>
+            <p className="text-secondary mb-0">A few favorites to spark your Jordan adventure.</p>
+          </div>
+          <Link to="/destinations" className="btn btn-outline-secondary">See all places <span aria-hidden="true">→</span></Link>
+        </div>
+        {featuredLoading ? <Loading /> : featuredError ? (
+          <div className="alert alert-danger" role="alert">{featuredError}</div>
+        ) : featuredPlaces.length ? (
+          <div className="row g-4 mt-1">
+            {featuredPlaces.map((destination) => (
+              <div className="col-sm-6 col-lg-4" key={destination._id}>
+                <DestinationCard destination={destination} />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="alert alert-light border mt-4">Featured places will appear here soon.</div>
+        )}
+      </section>
+
+      <section className="home-planner-cta">
+        <div>
+          <p className="eyebrow mb-2">Your trip, your way</p>
+          <h2 className="h3 fw-bold mb-2">Not sure where to begin?</h2>
+          <p className="text-secondary mb-0">Share your interests, dates, and budget. Our free AI planner will help map out your days.</p>
+        </div>
+        <Link to="/premium-planner" className="btn btn-dark">Build my free itinerary <span aria-hidden="true">→</span></Link>
       </section>
     </div>
   );
@@ -594,9 +647,6 @@ function PlannerPage() {
                 ))}
               </div>
             )}
-            <div className="alert alert-light border mt-4 mb-0">
-              <strong>Stripe checkout:</strong> not connected. This planner does not charge or take payments.
-            </div>
           </div>
         </div>
       </div>

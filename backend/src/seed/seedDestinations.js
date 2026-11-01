@@ -68,7 +68,7 @@ const destinationData = [
   {
     name: "Jerash",
     city: "Jerash",
-    region: "Balqa",
+    region: "Jerash",
     country: "Jordan",
     category: "Historical",
     shortDescription: "A remarkably preserved Greco-Roman city with grand ruins.",
@@ -89,7 +89,7 @@ const destinationData = [
   {
     name: "Dana Biosphere Reserve",
     city: "Dana",
-    region: "Balqa",
+    region: "Tafilah",
     country: "Jordan",
     category: "Nature",
     shortDescription: "Jordan's largest nature reserve with mountain trails and biodiversity.",
@@ -870,14 +870,14 @@ const seedDestinations = async () => {
   try {
     await Destination.bulkWrite(
       destinationData.map((destination) => {
-        const { image, imageCredit, gallery, location, ...seedFields } =
+        const { image, imageCredit, gallery, location, region, ...seedFields } =
           destination;
 
         return {
           updateOne: {
             filter: { name: destination.name },
             update: {
-              $set: { image, imageCredit, gallery, location },
+              $set: { image, imageCredit, gallery, location, region },
               $setOnInsert: seedFields,
             },
             upsert: true,
